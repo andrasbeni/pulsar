@@ -48,8 +48,11 @@ RUN mkdir -p /etc/apt/keyrings \
      && apt-get -y dist-upgrade \
      && apt-get -y install temurin-17-jdk
 
-ENV JAVA_HOME /usr/lib/jvm/temurin-17-jdk-amd64
-RUN echo networkaddress.cache.ttl=1 >> /usr/lib/jvm/temurin-17-jdk-amd64/conf/security/java.security
+RUN java_home=$(ls -d1 /usr/lib/jvm/*-17-*jdk-*) ; \
+    ln -s "$java_home" /usr/lib/jvm/java
+
+ENV JAVA_HOME /usr/lib/jvm/java
+RUN echo networkaddress.cache.ttl=1 >> /usr/lib/jvm/java/conf/security/java.security
 
 # /pulsar/bin/watch-znode.py requires python3-kazoo
 # /pulsar/bin/pulsar-managed-ledger-admin requires python3-protobuf

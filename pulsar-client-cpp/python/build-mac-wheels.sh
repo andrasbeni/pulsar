@@ -263,7 +263,7 @@ for line in "${PYTHON_VERSIONS[@]}"; do
     cd "${ROOT_DIR}/pulsar-client-cpp"
 
     find . -name CMakeCache.txt | xargs -r rm
-    find . -name CMakeFiles | xargs -r rm -rf
+    # find . -name CMakeFiles | xargs -r rm -rf
 
     PY_PREFIX=$CACHE_DIR/py-$PYTHON_VERSION
     PY_EXE=$PY_PREFIX/bin/python3

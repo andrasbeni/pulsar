@@ -24,7 +24,7 @@ set -e -x
 cd /pulsar/pulsar-client-cpp
 
 find . -name CMakeCache.txt | xargs -r rm
-find . -name CMakeFiles | xargs -r rm -rf
+# find . -name CMakeFiles | xargs -r rm -rf
 rm -f lib/*.pb.*
 
 cmake . -DBUILD_TESTS=OFF -DBUILD_WIRESHARK=OFF -DLINK_STATIC=ON \

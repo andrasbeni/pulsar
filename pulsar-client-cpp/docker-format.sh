@@ -42,6 +42,6 @@ DOCKER_CMD="docker run -i ${VOLUME_OPTION} ${IMAGE}"
 
 # Remove any cached CMake relate file from previous builds
 find . -name CMakeCache.txt | xargs rm -f
-find . -name CMakeFiles | xargs rm -rf
+# find . -name CMakeFiles | xargs rm -rf
 
 $DOCKER_CMD bash -c "${COMMAND}"

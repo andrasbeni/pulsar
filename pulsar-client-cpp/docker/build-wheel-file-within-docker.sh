@@ -23,7 +23,7 @@ set -ex
 cd /pulsar/pulsar-client-cpp
 
 find . -name CMakeCache.txt | xargs -r rm
-find . -name CMakeFiles | xargs -r rm -rf
+# find . -name CMakeFiles | xargs -r rm -rf
 
 cmake . -DPYTHON_INCLUDE_DIR=/opt/python/$PYTHON_SPEC/include/python$PYTHON_VERSION \
         -DPYTHON_LIBRARY=/opt/python/$PYTHON_SPEC/lib \
