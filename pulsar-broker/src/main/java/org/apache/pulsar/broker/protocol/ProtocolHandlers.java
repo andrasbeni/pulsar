@@ -18,7 +18,6 @@
  */
 package org.apache.pulsar.broker.protocol;
 
-import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import java.io.IOException;
@@ -34,12 +33,15 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pulsar.broker.ServiceConfiguration;
 import org.apache.pulsar.broker.service.BrokerService;
+import org.apache.pulsar.common.plugin.PluginLoader;
 
 /**
  * A collection of loaded handlers.
  */
 @Slf4j
 public class ProtocolHandlers implements AutoCloseable {
+
+    static final String PULSAR_PROTOCOL_HANDLER_DEFINITION_FILE = "pulsar-protocol-handler.yml";
 
     @Getter
     private final Map<SocketAddress, String> endpoints = new ConcurrentHashMap<>();
@@ -51,39 +53,26 @@ public class ProtocolHandlers implements AutoCloseable {
      * @return the collection of protocol handlers
      */
     public static ProtocolHandlers load(ServiceConfiguration conf) throws IOException {
-        ProtocolHandlerDefinitions definitions =
-                ProtocolHandlerUtils.searchForHandlers(
-                        conf.getProtocolHandlerDirectory(), conf.getNarExtractionDirectory());
-
-        ImmutableMap.Builder<String, ProtocolHandlerWithClassLoader> handlersBuilder = ImmutableMap.builder();
-
-        conf.getMessagingProtocols().forEach(protocol -> {
-
-            ProtocolHandlerMetadata definition = definitions.handlers().get(protocol);
-            if (null == definition) {
-                throw new RuntimeException("No protocol handler is found for protocol `" + protocol
-                    + "`. Available protocols are : " + definitions.handlers());
-            }
-
-            ProtocolHandlerWithClassLoader handler;
-            try {
-                handler = ProtocolHandlerUtils.load(definition, conf.getNarExtractionDirectory());
-            } catch (IOException e) {
-                log.error("Failed to load the protocol handler for protocol `" + protocol + "`", e);
-                throw new RuntimeException("Failed to load the protocol handler for protocol `" + protocol + "`");
-            }
-
-            if (!handler.accept(protocol)) {
-                handler.close();
-                log.error("Malformed protocol handler found for protocol `" + protocol + "`");
-                throw new RuntimeException("Malformed protocol handler found for protocol `" + protocol + "`");
-            }
-
-            handlersBuilder.put(protocol, handler);
-            log.info("Successfully loaded protocol handler for protocol `{}`", protocol);
-        });
-
-        return new ProtocolHandlers(handlersBuilder.build());
+        return new ProtocolHandlers(
+                new PluginLoader<>(
+                        "protocol handler",
+                        ProtocolHandler.class,
+                        ProtocolHandlerDefinition.class,
+                        ProtocolHandlerWithClassLoader::new,
+                        conf.getProtocolHandlerDirectory(),
+                        conf.getNarExtractionDirectory(),
+                        conf.getMessagingProtocols(),
+                        PULSAR_PROTOCOL_HANDLER_DEFINITION_FILE) {
+                    @Override
+                    protected void doubleCheck(String protocol, ProtocolHandlerWithClassLoader instance) {
+                        if (!instance.accept(protocol)) {
+                            instance.close();
+                            log.error("Malformed protocol handler found for protocol `" + protocol + "`");
+                            throw new RuntimeException(
+                                    "Malformed protocol handler found for protocol `" + protocol + "`");
+                        }
+                    }
+                }.load());
     }
 
     private final Map<String, ProtocolHandlerWithClassLoader> handlers;

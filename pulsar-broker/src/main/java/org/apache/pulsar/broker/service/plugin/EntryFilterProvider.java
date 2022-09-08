@@ -18,29 +18,33 @@
  */
 package org.apache.pulsar.broker.service.plugin;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-import java.io.File;
 import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.NoSuchFileException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.Collection;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.pulsar.broker.ServiceConfiguration;
-import org.apache.pulsar.common.nar.NarClassLoader;
-import org.apache.pulsar.common.nar.NarClassLoaderBuilder;
+import org.apache.pulsar.common.plugin.PluginLoader;
 import org.apache.pulsar.common.policies.data.EntryFilters;
-import org.apache.pulsar.common.util.ObjectMapperFactory;
 
 @Slf4j
-public class EntryFilterProvider {
+public class EntryFilterProvider extends PluginLoader<EntryFilter, EntryFilterDefinition, EntryFilterWithClassLoader> {
 
     @VisibleForTesting
     static final String ENTRY_FILTER_DEFINITION_FILE = "entry_filter";
+
+    protected EntryFilterProvider(ServiceConfiguration conf,  Collection<String> entryFilterNames) {
+        super("entry filter",
+                EntryFilter.class,
+                EntryFilterDefinition.class,
+                EntryFilterWithClassLoader::new,
+                conf.getEntryFiltersDirectory(),
+                conf.getNarExtractionDirectory(),
+                entryFilterNames,
+                ENTRY_FILTER_DEFINITION_FILE + ".yaml",
+                ENTRY_FILTER_DEFINITION_FILE + ".yml");
+    }
 
     /**
      * create entry filter instance.
@@ -48,141 +52,15 @@ public class EntryFilterProvider {
     public static ImmutableMap<String, EntryFilterWithClassLoader> createEntryFilters(ServiceConfiguration conf,
                                                                                       EntryFilters entryFilters)
             throws IOException {
-        EntryFilterDefinitions definitions = searchForEntryFilters(conf.getEntryFiltersDirectory(),
-                conf.getNarExtractionDirectory());
-        ImmutableMap.Builder<String, EntryFilterWithClassLoader> builder = ImmutableMap.builder();
-        for (String filterName : entryFilters.getEntryFilterNames().split(",")) {
-            EntryFilterMetaData metaData = definitions.getFilters().get(filterName);
-            if (null == metaData) {
-                throw new RuntimeException("No entry filter is found for name `" + filterName
-                        + "`. Available entry filters are : " + definitions.getFilters());
-            }
-            EntryFilterWithClassLoader filter;
-            filter = load(metaData, conf.getNarExtractionDirectory());
-            if (filter != null) {
-                builder.put(filterName, filter);
-            }
-            log.info("Successfully loaded entry filter for name `{}` from topic policy", filterName);
-        }
-        return builder.build();
+        String filterNames = entryFilters.getEntryFilterNames();
+        Collection<String> namesSplit = Arrays.asList(filterNames.split(","));
+        return new EntryFilterProvider(conf, namesSplit).load();
     }
 
     public static ImmutableMap<String, EntryFilterWithClassLoader> createEntryFilters(
             ServiceConfiguration conf) throws IOException {
-        EntryFilterDefinitions definitions = searchForEntryFilters(conf.getEntryFiltersDirectory(),
-                conf.getNarExtractionDirectory());
-        ImmutableMap.Builder<String, EntryFilterWithClassLoader> builder = ImmutableMap.builder();
-        for (String filterName : conf.getEntryFilterNames()) {
-            EntryFilterMetaData metaData = definitions.getFilters().get(filterName);
-            if (null == metaData) {
-                throw new RuntimeException("No entry filter is found for name `" + filterName
-                        + "`. Available entry filters are : " + definitions.getFilters());
-            }
-            EntryFilterWithClassLoader filter;
-            filter = load(metaData, conf.getNarExtractionDirectory());
-            if (filter != null) {
-                builder.put(filterName, filter);
-            }
-            log.info("Successfully loaded entry filter for name `{}`", filterName);
-        }
-        return builder.build();
+
+        return new EntryFilterProvider(conf, conf.getEntryFilterNames()).load();
     }
 
-    private static EntryFilterDefinitions searchForEntryFilters(String entryFiltersDirectory,
-                                                                            String narExtractionDirectory)
-            throws IOException {
-        Path path = Paths.get(entryFiltersDirectory).toAbsolutePath();
-        log.info("Searching for entry filters in {}", path);
-
-        EntryFilterDefinitions entryFilterDefinitions = new EntryFilterDefinitions();
-        if (!path.toFile().exists()) {
-            log.info("Pulsar entry filters directory not found");
-            return entryFilterDefinitions;
-        }
-
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(path, "*.nar")) {
-            for (Path archive : stream) {
-                try {
-                    EntryFilterDefinition def =
-                            getEntryFilterDefinition(archive.toString(), narExtractionDirectory);
-                    log.info("Found entry filter from {} : {}", archive, def);
-
-                    checkArgument(StringUtils.isNotBlank(def.getName()));
-                    checkArgument(StringUtils.isNotBlank(def.getEntryFilterClass()));
-
-                    EntryFilterMetaData metadata = new EntryFilterMetaData();
-                    metadata.setDefinition(def);
-                    metadata.setArchivePath(archive);
-
-                    entryFilterDefinitions.getFilters().put(def.getName(), metadata);
-                } catch (Throwable t) {
-                    log.warn("Failed to load entry filters from {}."
-                            + " It is OK however if you want to use this entry filters,"
-                            + " please make sure you put the correct entry filter NAR"
-                            + " package in the entry filter directory.", archive, t);
-                }
-            }
-        }
-
-        return entryFilterDefinitions;
-    }
-
-    private static EntryFilterDefinition getEntryFilterDefinition(String narPath,
-                                                                              String narExtractionDirectory)
-            throws IOException {
-        try (NarClassLoader ncl = NarClassLoaderBuilder.builder()
-                .narFile(new File(narPath))
-                .extractionDirectory(narExtractionDirectory)
-                .build()) {
-            return getEntryFilterDefinition(ncl);
-        }
-    }
-
-    @VisibleForTesting
-    static EntryFilterDefinition getEntryFilterDefinition(NarClassLoader ncl) throws IOException {
-        String configStr;
-
-        try {
-            configStr = ncl.getServiceDefinition(ENTRY_FILTER_DEFINITION_FILE + ".yaml");
-        } catch (NoSuchFileException e) {
-            configStr = ncl.getServiceDefinition(ENTRY_FILTER_DEFINITION_FILE + ".yml");
-        }
-
-        return ObjectMapperFactory.getThreadLocalYaml().readValue(
-                configStr, EntryFilterDefinition.class
-        );
-    }
-
-    private static EntryFilterWithClassLoader load(EntryFilterMetaData metadata,
-                                                               String narExtractionDirectory)
-            throws IOException {
-        final File narFile = metadata.getArchivePath().toAbsolutePath().toFile();
-        NarClassLoader ncl = NarClassLoaderBuilder.builder()
-                .narFile(narFile)
-                .parentClassLoader(EntryFilter.class.getClassLoader())
-                .extractionDirectory(narExtractionDirectory)
-                .build();
-        EntryFilterDefinition def = getEntryFilterDefinition(ncl);
-        if (StringUtils.isBlank(def.getEntryFilterClass())) {
-            throw new IOException("Entry filters `" + def.getName() + "` does NOT provide a entry"
-                    + " filters implementation");
-        }
-
-        try {
-            Class entryFilterClass = ncl.loadClass(def.getEntryFilterClass());
-            Object filter = entryFilterClass.getDeclaredConstructor().newInstance();
-            if (!(filter instanceof EntryFilter)) {
-                throw new IOException("Class " + def.getEntryFilterClass()
-                        + " does not implement entry filter interface");
-            }
-            EntryFilter pi = (EntryFilter) filter;
-            return new EntryFilterWithClassLoader(pi, ncl);
-        } catch (Exception e) {
-            if (e instanceof IOException) {
-                throw (IOException) e;
-            }
-            log.error("Failed to load class {}", def.getEntryFilterClass(), e);
-            throw new IOException(e);
-        }
-    }
 }

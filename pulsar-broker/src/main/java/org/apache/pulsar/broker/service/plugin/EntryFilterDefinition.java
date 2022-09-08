@@ -19,24 +19,22 @@
 package org.apache.pulsar.broker.service.plugin;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import org.apache.pulsar.common.plugin.PluginDefinition;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
-public class EntryFilterDefinition {
-
-    /**
-     * The name of the entry filter.
-     */
-    private String name;
-
-    /**
-     * The description of the entry filter to be used for user help.
-     */
-    private String description;
+public class EntryFilterDefinition extends PluginDefinition {
 
     /**
      * The class name for the entry filter.
      */
     private String entryFilterClass;
+
+    @Override
+    public String getPluginClassName() {
+        return getEntryFilterClass();
+    }
 }
