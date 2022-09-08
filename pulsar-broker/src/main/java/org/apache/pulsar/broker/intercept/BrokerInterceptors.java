@@ -18,7 +18,6 @@
  */
 package org.apache.pulsar.broker.intercept;
 
-import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.util.Map;
@@ -38,12 +37,16 @@ import org.apache.pulsar.common.api.proto.BaseCommand;
 import org.apache.pulsar.common.api.proto.CommandAck;
 import org.apache.pulsar.common.api.proto.MessageMetadata;
 import org.apache.pulsar.common.intercept.InterceptException;
+import org.apache.pulsar.common.plugin.PluginLoader;
 
 /**
  * A collection of broker interceptor.
  */
 @Slf4j
 public class BrokerInterceptors implements BrokerInterceptor {
+
+    private static final String BROKER_INTERCEPTOR_DEFINITION_FILE = "broker_interceptor.yml";
+
 
     private final Map<String, BrokerInterceptorWithClassLoader> interceptors;
 
@@ -58,34 +61,16 @@ public class BrokerInterceptors implements BrokerInterceptor {
      * @return the collection of broker event interceptor
      */
     public static BrokerInterceptor load(ServiceConfiguration conf) throws IOException {
-        BrokerInterceptorDefinitions definitions =
-                BrokerInterceptorUtils.searchForInterceptors(conf.getBrokerInterceptorsDirectory(),
-                        conf.getNarExtractionDirectory());
 
-        ImmutableMap.Builder<String, BrokerInterceptorWithClassLoader> builder = ImmutableMap.builder();
-
-        conf.getBrokerInterceptors().forEach(interceptorName -> {
-
-            BrokerInterceptorMetadata definition = definitions.interceptors().get(interceptorName);
-            if (null == definition) {
-                throw new RuntimeException("No broker interceptor is found for name `" + interceptorName
-                        + "`. Available broker interceptors are : " + definitions.interceptors());
-            }
-
-            BrokerInterceptorWithClassLoader interceptor;
-            try {
-                interceptor = BrokerInterceptorUtils.load(definition, conf.getNarExtractionDirectory());
-                if (interceptor != null) {
-                    builder.put(interceptorName, interceptor);
-                }
-                log.info("Successfully loaded broker interceptor for name `{}`", interceptorName);
-            } catch (IOException e) {
-                log.error("Failed to load the broker interceptor for name `" + interceptorName + "`", e);
-                throw new RuntimeException("Failed to load the broker interceptor for name `" + interceptorName + "`");
-            }
-        });
-
-        Map<String, BrokerInterceptorWithClassLoader> interceptors = builder.build();
+        Map<String, BrokerInterceptorWithClassLoader> interceptors = new PluginLoader<>(
+                "broker interceptor",
+                BrokerInterceptor.class,
+                BrokerInterceptorDefinition.class,
+                BrokerInterceptorWithClassLoader::new,
+                conf.getBrokerInterceptorsDirectory(),
+                conf.getNarExtractionDirectory(),
+                conf.getBrokerInterceptors(),
+                BROKER_INTERCEPTOR_DEFINITION_FILE).load();
         if (interceptors != null && !interceptors.isEmpty()) {
             return new BrokerInterceptors(interceptors);
         } else {

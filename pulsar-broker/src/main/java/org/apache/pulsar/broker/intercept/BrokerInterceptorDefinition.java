@@ -19,27 +19,25 @@
 package org.apache.pulsar.broker.intercept;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import org.apache.pulsar.common.plugin.PluginDefinition;
 
 /**
  * Metadata information about a broker interceptor.
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
-public class BrokerInterceptorDefinition {
-
-    /**
-     * The name of the broker interceptor.
-     */
-    private String name;
-
-    /**
-     * The description of the broker interceptor to be used for user help.
-     */
-    private String description;
+public class BrokerInterceptorDefinition extends PluginDefinition {
 
     /**
      * The class name for the broker interceptor.
      */
     private String interceptorClass;
+
+    @Override
+    public String getPluginClassName() {
+        return getInterceptorClass();
+    }
 }

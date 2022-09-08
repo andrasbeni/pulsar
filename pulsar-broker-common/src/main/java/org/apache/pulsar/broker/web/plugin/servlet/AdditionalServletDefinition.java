@@ -19,26 +19,25 @@
 package org.apache.pulsar.broker.web.plugin.servlet;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import org.apache.pulsar.common.plugin.PluginDefinition;
 
 /**
  * Metadata information about an additional servlet.
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
-public class AdditionalServletDefinition {
-    /**
-     * The name of the additional servlet.
-     */
-    private String name;
-
-    /**
-     * The description of the additional servlet to be used for user help.
-     */
-    private String description;
+public class AdditionalServletDefinition extends PluginDefinition {
 
     /**
      * The class name for the additional servlet.
      */
     private String additionalServletClass;
+
+    @Override
+    public String getPluginClassName() {
+        return getAdditionalServletClass();
+    }
 }

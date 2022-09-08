@@ -18,20 +18,23 @@
  */
 package org.apache.pulsar.broker.web.plugin.servlet;
 
-import com.google.common.collect.ImmutableMap;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Map;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.pulsar.common.configuration.PulsarConfiguration;
 import org.apache.pulsar.common.nar.NarClassLoader;
+import org.apache.pulsar.common.plugin.PluginLoader;
 
 /**
  * A collection of loaded additional servlets.
  */
 @Slf4j
 public class AdditionalServlets implements AutoCloseable {
+
+    private static final String ADDITIONAL_SERVLET_FILE = "additional_servlet.yml";
 
     private static final String ADDITIONAL_SERVLET_DIRECTORY = "additionalServletDirectory";
 
@@ -79,33 +82,15 @@ public class AdditionalServlets implements AutoCloseable {
             return null;
         }
 
-        AdditionalServletDefinitions definitions =
-                AdditionalServletUtils.searchForServlets(additionalServletDirectory
-                        , narExtractionDirectory);
-        ImmutableMap.Builder<String, AdditionalServletWithClassLoader> builder = ImmutableMap.builder();
-
-        String[] additionalServletsList = additionalServlets.split(",");
-        for (String servletName : additionalServletsList) {
-            AdditionalServletMetadata definition = definitions.servlets().get(servletName);
-            if (null == definition) {
-                throw new RuntimeException("No additional servlet is found for name `" + servletName
-                        + "`. Available additional servlet are : " + definitions.servlets());
-            }
-
-            AdditionalServletWithClassLoader servletWithClassLoader;
-            try {
-                servletWithClassLoader = AdditionalServletUtils.load(definition, narExtractionDirectory);
-                if (servletWithClassLoader != null) {
-                    builder.put(servletName, servletWithClassLoader);
-                }
-                log.info("Successfully loaded additional servlet for name `{}`", servletName);
-            } catch (IOException e) {
-                log.error("Failed to load the additional servlet for name `" + servletName + "`", e);
-                throw new RuntimeException("Failed to load the additional servlet for name `" + servletName + "`");
-            }
-        }
-
-        Map<String, AdditionalServletWithClassLoader> servlets = builder.build();
+        Map<String, AdditionalServletWithClassLoader> servlets = new PluginLoader<>(
+                "additional servlet",
+                AdditionalServlet.class,
+                AdditionalServletDefinition.class,
+                AdditionalServletWithClassLoader::new,
+                additionalServletDirectory,
+                narExtractionDirectory,
+                Arrays.asList(additionalServlets.split(",")),
+                ADDITIONAL_SERVLET_FILE).load();
         if (servlets != null && !servlets.isEmpty()) {
             return new AdditionalServlets(servlets);
         }

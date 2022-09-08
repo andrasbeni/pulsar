@@ -16,29 +16,22 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.pulsar.broker.protocol;
+package org.apache.pulsar.common.plugin;
 
+import java.nio.file.Path;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import org.apache.pulsar.common.plugin.PluginDefinition;
 
-/**
- * Metadata information about a Pulsar protocol handler.
- */
 @Data
-@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
-public class ProtocolHandlerDefinition extends PluginDefinition {
+public class PluginMetadata<PluginDefinition> {
+    /**
+     * The definition of the entry filter.
+     */
+    private PluginDefinition definition;
 
     /**
-     * The class name for the protocol handler.
+     * The path to the handler package.
      */
-    private String handlerClass;
-
-
-    @Override
-    public String getPluginClassName() {
-        return getHandlerClass();
-    }
+    private Path archivePath;
 }

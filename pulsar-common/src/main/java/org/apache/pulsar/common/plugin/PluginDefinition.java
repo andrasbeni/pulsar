@@ -16,29 +16,31 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.pulsar.broker.protocol;
+package org.apache.pulsar.common.plugin;
 
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import org.apache.pulsar.common.plugin.PluginDefinition;
 
 /**
  * Metadata information about a Pulsar protocol handler.
  */
 @Data
-@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
-public class ProtocolHandlerDefinition extends PluginDefinition {
+public abstract class PluginDefinition {
 
     /**
-     * The class name for the protocol handler.
+     * The name of the plugin.
      */
-    private String handlerClass;
+    private String name;
 
+    /**
+     * The description of the plugin to be used for user help.
+     */
+    private String description;
 
-    @Override
-    public String getPluginClassName() {
-        return getHandlerClass();
-    }
+    /**
+     * The class name for the plugin implementation.
+     */
+    public abstract String getPluginClassName();
+
 }
