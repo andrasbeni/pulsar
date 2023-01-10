@@ -16,22 +16,25 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.pulsar.common.plugin;
+package org.apache.pulsar.metadata.api.plugins;
 
-import java.nio.file.Path;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import org.apache.pulsar.common.plugin.PluginDefinition;
 
 @Data
+@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
-public class PluginMetadata<PluginDefinition> {
-    /**
-     * The definition of the plugin.
-     */
-    private PluginDefinition definition;
+public class MetadataStoreDefinition extends PluginDefinition {
 
     /**
-     * The path to the handler package.
+     * The class name for the metadata store.
      */
-    private Path archivePath;
+    private String metadataStoreClass;
+
+    @Override
+    public String getPluginClassName() {
+        return metadataStoreClass;
+    }
 }

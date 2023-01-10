@@ -16,22 +16,4 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.pulsar.common.plugin;
-
-import java.nio.file.Path;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
-@Data
-@NoArgsConstructor
-public class PluginMetadata<PluginDefinition> {
-    /**
-     * The definition of the plugin.
-     */
-    private PluginDefinition definition;
-
-    /**
-     * The path to the handler package.
-     */
-    private Path archivePath;
-}
+package org.apache.pulsar.metadata.api.plugins;

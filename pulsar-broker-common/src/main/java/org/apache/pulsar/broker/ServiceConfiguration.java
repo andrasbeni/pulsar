@@ -434,6 +434,12 @@ public class ServiceConfiguration implements PulsarConfiguration {
     )
     private int metadataStoreCacheExpirySeconds = 300;
 
+    @FieldContext(
+            category = CATEGORY_SERVER,
+            doc = "Metadata store implementations directory."
+    )
+    private String metadataStorePluginsDirectory = "./metadataStorePlugins";
+
     @Deprecated
     @FieldContext(
         category = CATEGORY_SERVER,

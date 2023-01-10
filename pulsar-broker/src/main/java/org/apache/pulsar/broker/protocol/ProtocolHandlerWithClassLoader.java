@@ -26,10 +26,10 @@ import java.util.Map;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.pulsar.broker.ClassLoaderSwitcher;
 import org.apache.pulsar.broker.ServiceConfiguration;
 import org.apache.pulsar.broker.service.BrokerService;
 import org.apache.pulsar.common.nar.NarClassLoader;
+import org.apache.pulsar.common.plugin.ClassLoaderSwitcher;
 
 /**
  * A protocol handler with its classloader.

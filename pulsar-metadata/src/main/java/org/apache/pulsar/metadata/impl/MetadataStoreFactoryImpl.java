@@ -22,6 +22,7 @@ import org.apache.pulsar.metadata.api.MetadataStore;
 import org.apache.pulsar.metadata.api.MetadataStoreConfig;
 import org.apache.pulsar.metadata.api.MetadataStoreException;
 import org.apache.pulsar.metadata.api.extended.MetadataStoreExtended;
+import org.apache.pulsar.metadata.api.plugins.MetadataStorePlugins;
 
 public class MetadataStoreFactoryImpl {
 
@@ -56,6 +57,10 @@ public class MetadataStoreFactoryImpl {
             return new ZKMetadataStore(metadataURL.substring(ZKMetadataStore.ZK_SCHEME_IDENTIFIER.length()),
                     metadataStoreConfig, enableSessionWatcher);
         } else {
+            MetadataStorePlugins plugins = new MetadataStorePlugins(metadataURL, metadataStoreConfig);
+            if (plugins.canHandle(metadataURL)) {
+                return plugins.load(metadataURL, metadataStoreConfig, enableSessionWatcher);
+            }
             return new ZKMetadataStore(metadataURL, metadataStoreConfig, enableSessionWatcher);
         }
     }

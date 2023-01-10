@@ -18,20 +18,20 @@
  */
 package org.apache.pulsar.common.plugin;
 
-import java.nio.file.Path;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+/**
+ * Help to switch the class loader of current thread to the NarClassLoader, and change it back when it's done.
+ * With the help of try-with-resources statement, the code would be cleaner than using try finally every time.
+ */
+public class ClassLoaderSwitcher implements AutoCloseable {
+    private final ClassLoader prevClassLoader;
 
-@Data
-@NoArgsConstructor
-public class PluginMetadata<PluginDefinition> {
-    /**
-     * The definition of the plugin.
-     */
-    private PluginDefinition definition;
+    public ClassLoaderSwitcher(ClassLoader classLoader) {
+        prevClassLoader = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(classLoader);
+    }
 
-    /**
-     * The path to the handler package.
-     */
-    private Path archivePath;
+    @Override
+    public void close() {
+        Thread.currentThread().setContextClassLoader(prevClassLoader);
+    }
 }

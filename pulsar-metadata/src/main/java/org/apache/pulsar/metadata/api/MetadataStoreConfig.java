@@ -92,4 +92,9 @@ public class MetadataStoreConfig {
      * separate clusters.
      */
     private MetadataEventSynchronizer synchronizer;
+
+
+    private String pluginsDirectory;
+
+    private String narExtractionDirectory;
 }

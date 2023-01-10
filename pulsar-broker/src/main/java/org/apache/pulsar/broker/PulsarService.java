@@ -364,6 +364,8 @@ public class PulsarService implements AutoCloseable, ShutdownService {
                         .batchingMaxSizeKb(config.getMetadataStoreBatchingMaxSizeKb())
                         .metadataStoreName(MetadataStoreConfig.CONFIGURATION_METADATA_STORE)
                         .synchronizer(synchronizer)
+                        .narExtractionDirectory(config.getNarExtractionDirectory())
+                        .pluginsDirectory(config.getMetadataStorePluginsDirectory())
                         .build());
     }
 

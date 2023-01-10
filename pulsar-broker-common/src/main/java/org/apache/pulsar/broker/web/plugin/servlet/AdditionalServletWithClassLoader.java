@@ -22,9 +22,9 @@ import java.io.IOException;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.pulsar.broker.ClassLoaderSwitcher;
 import org.apache.pulsar.common.configuration.PulsarConfiguration;
 import org.apache.pulsar.common.nar.NarClassLoader;
+import org.apache.pulsar.common.plugin.ClassLoaderSwitcher;
 import org.eclipse.jetty.servlet.ServletHolder;
 
 /**
