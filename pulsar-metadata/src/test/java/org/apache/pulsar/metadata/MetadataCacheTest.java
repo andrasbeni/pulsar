@@ -290,7 +290,8 @@ public class MetadataCacheTest extends BaseMetadataStoreTest {
         assertEquals(objCache.get(key1).join(), Optional.empty());
 
         MyClass value1 = new MyClass("a", 1);
-        store.put(key1, ObjectMapperFactory.getMapper().writer().writeValueAsBytes(value1), Optional.of(-1L)).join();
+        Stat putResult = store.put(key1, ObjectMapperFactory.getMapper().writer().writeValueAsBytes(value1),
+                Optional.of(-1L)).join();
 
         Awaitility.await().untilAsserted(() -> {
             assertEquals(objCache.getIfCached(key1), Optional.of(value1));
@@ -298,7 +299,8 @@ public class MetadataCacheTest extends BaseMetadataStoreTest {
         });
 
         MyClass value2 = new MyClass("a", 2);
-        store.put(key1, ObjectMapperFactory.getMapper().writer().writeValueAsBytes(value2), Optional.of(0L)).join();
+        store.put(key1, ObjectMapperFactory.getMapper().writer().writeValueAsBytes(value2),
+                Optional.of(putResult.getVersion())).join();
 
         Awaitility.await().untilAsserted(() -> {
             assertEquals(objCache.getIfCached(key1), Optional.of(value2));
