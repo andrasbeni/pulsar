@@ -32,6 +32,8 @@ import org.apache.pulsar.metadata.api.MetadataStoreException.LockBusyException;
 import org.apache.pulsar.metadata.api.coordination.ResourceLock;
 import org.apache.pulsar.metadata.api.extended.CreateOption;
 import org.apache.pulsar.metadata.api.extended.MetadataStoreExtended;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Slf4j
 public class ResourceLockImpl<T> implements ResourceLock<T> {
@@ -60,6 +62,7 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
         this.serde = serde;
         this.path = path;
         this.version = -1;
+        log.info("\uD83E\uDEB2 - ctor: version: {}", version);
         this.expiredFuture = new CompletableFuture<>();
         this.state = State.Init;
     }
@@ -76,12 +79,15 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
 
     @Override
     public synchronized CompletableFuture<Void> release() {
+        log.info("\uD83E\uDEB2 - release ({})", state);
+
         if (state == State.Released) {
             return CompletableFuture.completedFuture(null);
         }
 
         state = State.Releasing;
         CompletableFuture<Void> result = new CompletableFuture<>();
+        log.info("\uD83E\uDEB2 - calling delete ({})", version);
 
         store.delete(path, Optional.of(version))
                 .thenRun(() -> {
@@ -91,6 +97,8 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
                     expiredFuture.complete(null);
                     result.complete(null);
                 }).exceptionally(ex -> {
+                    log.info("\uD83E\uDEB2 - delete on release failed with exception: {}", ex);
+
                     if (ex.getCause() instanceof MetadataStoreException.NotFoundException) {
                         // The lock is not there on release. We can anyway proceed
                         synchronized (ResourceLockImpl.this) {
@@ -123,6 +131,8 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
     }
 
     synchronized CompletableFuture<Void> acquire(T newValue) {
+        log.info("\uD83E\uDEB2 - Acquire {}", newValue);
+
         CompletableFuture<Void> result = new CompletableFuture<>();
         acquireWithNoRevalidation(newValue)
                 .thenRun(() -> result.complete(null))
@@ -144,10 +154,10 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
     }
 
     // Simple operation of acquiring the lock with no retries, or checking for the lock content
-    private CompletableFuture<Void> acquireWithNoRevalidation(T newValue) {
-        if (log.isDebugEnabled()) {
-            log.debug("acquireWithNoRevalidation,newValue={},version={}", newValue, version);
-        }
+    CompletableFuture<Void> acquireWithNoRevalidation(T newValue) {
+       // if (log.isDebugEnabled()) {
+            log.info("\uD83E\uDEB2 - acquireWithNoRevalidation,newValue={},version={}", newValue, version);
+       // }
         byte[] payload;
         try {
             payload = serde.serialize(path, newValue);
@@ -161,9 +171,10 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
                     synchronized (ResourceLockImpl.this) {
                         state = State.Valid;
                         version = stat.getVersion();
+                        log.info("\uD83E\uDEB2 - put success: version: {}", version);
                         value = newValue;
                     }
-                    log.info("Acquired resource lock on {}", path);
+                    log.info("\uD83E\uDEB2 - Acquired resource lock on {}", path);
                     result.complete(null);
                 }).exceptionally(ex -> {
             if (ex.getCause() instanceof BadVersionException) {
@@ -184,15 +195,15 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
             return;
         }
 
-        log.info("Lock on resource {} was invalidated", path);
+        log.info("\uD83E\uDEB2 - Lock on resource {} was invalidated", path);
         revalidate(value, true)
-                .thenRun(() -> log.info("Successfully revalidated the lock on {}", path));
+                .thenRun(() -> log.info("\uD83E\uDEB2 - Successfully revalidated the lock on {}", path));
     }
 
     synchronized CompletableFuture<Void> revalidateIfNeededAfterReconnection() {
         if (revalidateAfterReconnection) {
             revalidateAfterReconnection = false;
-            log.warn("Revalidate lock at {} after reconnection", path);
+            log.warn("\uD83E\uDEB2 - Revalidate lock at {} after reconnection", path);
             return revalidate(value, true);
         } else {
             return CompletableFuture.completedFuture(null);
@@ -200,15 +211,20 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
     }
 
     synchronized CompletableFuture<Void> revalidate(T newValue, boolean revalidateAfterReconnection) {
+        log.warn("\uD83E\uDEB2 - Revalidate lock at {}", path);
+
         if (revalidateFuture == null || revalidateFuture.isDone()) {
             revalidateFuture = doRevalidate(newValue);
         } else {
-            if (log.isDebugEnabled()) {
-                log.debug("Previous revalidating is not finished while revalidate newValue={}, value={}, version={}",
+         //   if (log.isDebugEnabled()) {
+                log.info("\uD83E\uDEB2 - Previous revalidating is not finished while revalidate newValue={}, "
+                                + "value={}, version={}",
                         newValue, value, version);
-            }
+            //}
             CompletableFuture<Void> newFuture = new CompletableFuture<>();
             revalidateFuture.whenComplete((unused, throwable) -> {
+                log.warn("\uD83E\uDEB2 - RevalidateF complete {}", path);
+
                 doRevalidate(newValue).thenRun(() -> newFuture.complete(null))
                         .exceptionally(throwable1 -> {
                             newFuture.completeExceptionally(throwable1);
@@ -222,7 +238,7 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
                 Throwable realCause = FutureUtil.unwrapCompletionException(ex);
                 if (!revalidateAfterReconnection || realCause instanceof BadVersionException
                         || realCause instanceof LockBusyException) {
-                    log.warn("Failed to revalidate the lock at {}. Marked as expired. {}",
+                    log.warn("\uD83E\uDEB2 - Failed to revalidate the lock at {}. Marked as expired. {}",
                             path, realCause.getMessage());
                     state = State.Released;
                     expiredFuture.complete(null);
@@ -231,8 +247,8 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
                     // Continue assuming we hold the lock, until we can revalidate it, either
                     // on Reconnected or SessionReestablished events.
                     ResourceLockImpl.this.revalidateAfterReconnection = true;
-                    log.warn("Failed to revalidate the lock at {}. Retrying later on reconnection {}", path,
-                            realCause.getMessage());
+                    log.warn("\uD83E\uDEB2 - Failed to revalidate the lock at {}. Retrying later on reconnection {}",
+                            path, realCause.getMessage());
                 }
             }
             return null;
@@ -240,16 +256,17 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
         return revalidateFuture;
     }
 
-    private synchronized CompletableFuture<Void> doRevalidate(T newValue) {
-        if (log.isDebugEnabled()) {
-            log.debug("doRevalidate with newValue={}, version={}", newValue, version);
-        }
+    synchronized CompletableFuture<Void> doRevalidate(T newValue) {
+      //  if (log.isDebugEnabled()) {
+            log.info("doRevalidate with newValue={}, version={}", newValue, version);
+     //   }
         return store.get(path)
                 .thenCompose(optGetResult -> {
                     if (!optGetResult.isPresent()) {
                         // The lock just disappeared, try to acquire it again
                         // Reset the expectation on the version
                         setVersion(-1L);
+                        log.info("\uD83E\uDEB2 - doRevalidate: version: {}", -1);
                         return acquireWithNoRevalidation(newValue)
                                 .thenRun(() -> log.info("Successfully re-acquired missing lock at {}", path));
                     }
@@ -277,6 +294,7 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
                                 // If the new lock belongs to the same session, there's no
                                 // need to recreate it.
                                 version = res.getStat().getVersion();
+                                log.info("\uD83E\uDEB2 - get success: version: {}", version);
                                 value = newValue;
                                 return CompletableFuture.completedFuture(null);
                             } else {
@@ -284,9 +302,11 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
                                 // session which maybe expiring soon
                                 log.info("Deleting stale lock at {}", path);
                                 return store.delete(path, Optional.of(res.getStat().getVersion()))
-                                        .thenRun(() ->
+                                        .thenRun(() -> {
                                             // Reset the expectation that the key is not there anymore
-                                            setVersion(-1L)
+                                            setVersion(-1L);
+                                            log.info("\uD83E\uDEB2 - stale: version: {}", -1);
+                                        }
                                         )
                                         .thenCompose(__ -> acquireWithNoRevalidation(newValue))
                                         .thenRun(() -> log.info("Successfully re-acquired stale lock at {}", path));
@@ -303,9 +323,11 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
                         }
 
                         return store.delete(path, Optional.of(res.getStat().getVersion()))
-                                .thenRun(() ->
+                                .thenRun(() -> {
                                     // Reset the expectation that the key is not there anymore
-                                    setVersion(-1L)
+                                    setVersion(-1L);
+                                            log.info("\uD83E\uDEB2 - before recreate: version: {}", -1);
+                                }
                                 )
                                 .thenCompose(__ -> acquireWithNoRevalidation(newValue))
                                 .thenRun(() -> log.info("Successfully re-acquired lock at {}", path));
@@ -316,4 +338,111 @@ public class ResourceLockImpl<T> implements ResourceLock<T> {
     private synchronized void setVersion(long version) {
         this.version = version;
     }
+
+
+
+    static class LoggingLock<T> extends ResourceLockImpl<T> {
+        private final Logger log = LoggerFactory.getLogger("wrapper\uD83C\uDF81");
+
+        public LoggingLock(MetadataStoreExtended store, MetadataSerde<T> serde, String path) {
+            super(store, serde, path);
+            log.info("Constructor");
+        }
+
+
+        @Override
+        public String getPath() {
+            log.info("getPath");
+            return super.getPath();
+        }
+
+        @Override
+        public T getValue() {
+            log.info("getValue");
+            return super.getValue();
+        }
+
+        @Override
+        public CompletableFuture<Void> updateValue(T newValue) {
+            log.info("updateValue({})", newValue);
+            return super.updateValue(newValue);
+        }
+
+        @Override
+        public CompletableFuture<Void> release() {
+            log.info("release");
+            return super.release();
+        }
+
+        @Override
+        public CompletableFuture<Void> getLockExpiredFuture() {
+            log.info("getFuture");
+            return super.getLockExpiredFuture();
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        @Override
+        public int hashCode() {
+            log.info("hashCode()");
+            return super.hashCode();
+        }
+
+        synchronized CompletableFuture<Void> acquire(T newValue) {
+            log.info("acquire({})", newValue);
+            return super.acquire(newValue);
+        }
+
+        // Simple operation of acquiring the lock with no retries, or checking for the lock content
+        CompletableFuture<Void> acquireWithNoRevalidation(T newValue) {
+            log.info("acquireWithNoRevalidation({})", newValue);
+            return super.acquireWithNoRevalidation(newValue);
+        }
+
+        synchronized void lockWasInvalidated() {
+            log.info("lockWasInvalidated()");
+            super.lockWasInvalidated();
+        }
+
+        synchronized CompletableFuture<Void> revalidateIfNeededAfterReconnection() {
+            log.info("revalidateIfNeededAfterReconnection()");
+            return super.revalidateIfNeededAfterReconnection();
+        }
+
+        synchronized CompletableFuture<Void> revalidate(T newValue, boolean revalidateAfterReconnection) {
+            log.info("revalidate({}, {})", newValue, revalidateAfterReconnection);
+            return super.revalidate(newValue, revalidateAfterReconnection);
+        }
+
+        synchronized CompletableFuture<Void> doRevalidate(T newValue) {
+            log.info("doRevalidate({})", newValue);
+            return super.doRevalidate(newValue);
+        }
+
+    }
+
+
+
+
+
+
 }

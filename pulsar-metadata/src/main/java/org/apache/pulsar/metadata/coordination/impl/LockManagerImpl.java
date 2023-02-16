@@ -83,7 +83,7 @@ class LockManagerImpl<T> implements LockManager<T> {
 
     @Override
     public CompletableFuture<ResourceLock<T>> acquireLock(String path, T value) {
-        ResourceLockImpl<T> lock = new ResourceLockImpl<>(store, serde, path);
+        ResourceLockImpl<T> lock = new ResourceLockImpl.LoggingLock<>(store, serde, path);
 
         CompletableFuture<ResourceLock<T>> result = new CompletableFuture<>();
         lock.acquire(value).thenRun(() -> {
@@ -144,6 +144,8 @@ class LockManagerImpl<T> implements LockManager<T> {
 
     private void handleDataNotification(Notification n) {
         if (n.getType() == NotificationType.Deleted) {
+            log.info("\uD83E\uDEB2 - notification ({})", n);
+
             ResourceLockImpl<T> lock = locks.get(n.getPath());
             if (lock != null) {
                 lock.lockWasInvalidated();
@@ -167,6 +169,7 @@ class LockManagerImpl<T> implements LockManager<T> {
 
     @Override
     public CompletableFuture<Void> asyncClose() {
+        log.info("\uD83E\uDEB2 - asyncClose");
         Map<String, ResourceLock<T>> locks;
         synchronized (this) {
             if (state != State.Ready) {
@@ -176,6 +179,8 @@ class LockManagerImpl<T> implements LockManager<T> {
             locks = new HashMap<>(this.locks);
             this.state = State.Closed;
         }
+
+        log.info("\uD83E\uDEB2 - calling release");
 
         return FutureUtil.waitForAll(locks.values().stream()
                 .map(ResourceLock::release)

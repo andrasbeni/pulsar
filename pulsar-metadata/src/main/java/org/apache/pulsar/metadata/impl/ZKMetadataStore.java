@@ -478,6 +478,14 @@ public class ZKMetadataStore extends AbstractBatchedMetadataStore
     }
 
     private void handleWatchEvent(WatchedEvent event) {
+        new Thread(() -> {
+        try {
+            if (event.getType() == Watcher.Event.EventType.NodeDeleted) {
+                Thread.sleep(100);
+            }
+        } catch (InterruptedException e) {
+
+        }
         if (log.isDebugEnabled()) {
             log.debug("Received ZK watch : {}", event);
         }
@@ -522,6 +530,7 @@ public class ZKMetadataStore extends AbstractBatchedMetadataStore
         if (childrenChangedNotification != null) {
             receivedNotification(childrenChangedNotification);
         }
+        }).start();
     }
 
     private static CreateMode getCreateMode(EnumSet<CreateOption> options) {

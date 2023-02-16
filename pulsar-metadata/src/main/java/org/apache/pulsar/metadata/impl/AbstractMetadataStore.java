@@ -61,6 +61,7 @@ import org.apache.pulsar.metadata.api.extended.MetadataStoreExtended;
 import org.apache.pulsar.metadata.api.extended.SessionEvent;
 import org.apache.pulsar.metadata.cache.impl.MetadataCacheImpl;
 import org.apache.pulsar.metadata.impl.stats.MetadataStoreStats;
+import org.slf4j.LoggerFactory;
 
 @Slf4j
 public abstract class AbstractMetadataStore implements MetadataStoreExtended, Consumer<Notification> {
@@ -117,6 +118,7 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
                 .buildAsync(new AsyncCacheLoader<String, Boolean>() {
                     @Override
                     public CompletableFuture<Boolean> asyncLoad(String key, Executor executor) {
+                        log.info("ExistsCache asyncLoad: {}", key);
                         return existsFromStore(key);
                     }
 
@@ -124,6 +126,8 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
                     public CompletableFuture<Boolean> asyncReload(String key, Boolean oldValue,
                             Executor executor) {
                         if (isConnected) {
+                            log.info("ExistsCache asyncReload: {}", key);
+
                             return existsFromStore(key);
                         } else {
                             // Do not refresh if we're not connected
@@ -243,6 +247,8 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
 
     @Override
     public CompletableFuture<Optional<GetResult>> get(String path) {
+        LoggerFactory.getLogger("wrapper\uD83D\uDD11").info("Get: {}", path);
+
         if (isClosed()) {
             return FutureUtil.failedFuture(
                     new MetadataStoreException.AlreadyClosedException());
@@ -253,11 +259,14 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
             return FutureUtil
                     .failedFuture(new MetadataStoreException.InvalidPathException(path));
         }
+        log.info("Get calling storeGet: {}", path);
         return storeGet(path)
                 .whenComplete((v, t) -> {
                     if (t != null) {
+                        log.info("Get {} failed: {}", path, t);
                         metadataStoreStats.recordGetOpsFailed(System.currentTimeMillis() - start);
                     } else {
+                        log.info("Get {} succeeded: {}", path, v);
                         metadataStoreStats.recordGetOpsSucceeded(System.currentTimeMillis() - start);
                     }
                 });
@@ -267,11 +276,14 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
 
     @Override
     public CompletableFuture<Stat> put(String path, byte[] value, Optional<Long> expectedVersion) {
+        LoggerFactory.getLogger("wrapper\uD83D\uDD11").info("Put: {}", path);
         return put(path, value, expectedVersion, EnumSet.noneOf(CreateOption.class));
     }
 
     @Override
     public final CompletableFuture<List<String>> getChildren(String path) {
+        log.info("GetChildren: {}", path);
+
         if (isClosed()) {
             return FutureUtil.failedFuture(
                     new MetadataStoreException.AlreadyClosedException());
@@ -279,11 +291,13 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
         if (!isValidPath(path)) {
             return FutureUtil.failedFuture(new MetadataStoreException.InvalidPathException(path));
         }
+        log.info("GetChildren from cache: {}", path);
         return childrenCache.get(path);
     }
 
     @Override
     public final CompletableFuture<Boolean> exists(String path) {
+        LoggerFactory.getLogger("wrapper\uD83D\uDD11").info("Exists: {}", path);
         if (isClosed()) {
             return FutureUtil.failedFuture(
                     new MetadataStoreException.AlreadyClosedException());
@@ -291,7 +305,10 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
         if (!isValidPath(path)) {
             return FutureUtil.failedFuture(new MetadataStoreException.InvalidPathException(path));
         }
-        return existsCache.get(path);
+        log.info("Exists from cache: {}", path);
+        return existsCache.get(path).whenComplete((v, t) -> {
+            log.info("existsCache {}, ({}, {})", path, v, t);
+        });
     }
 
     @Override
@@ -303,6 +320,8 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
     }
 
     protected CompletableFuture<Void> receivedNotification(Notification notification) {
+        LoggerFactory.getLogger("wrapper\uD83D\uDD11").info("Received notification: {}", notification);
+
         try {
             return CompletableFuture.supplyAsync(() -> {
                 listeners.forEach(listener -> {
@@ -326,6 +345,7 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
         NotificationType type = n.getType();
 
         if (type == NotificationType.Created || type == NotificationType.Deleted) {
+            log.info("ExistsCache invalidate(notification): {}", path);
             existsCache.synchronous().invalidate(path);
             String parent = parent(path);
             if (parent != null) {
@@ -346,6 +366,8 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
 
     @Override
     public final CompletableFuture<Void> delete(String path, Optional<Long> expectedVersion) {
+        LoggerFactory.getLogger("wrapper\uD83D\uDD11").info("Delete: {}, {}", path, expectedVersion);
+
         if (isClosed()) {
             return FutureUtil.failedFuture(
                     new MetadataStoreException.AlreadyClosedException());
@@ -383,6 +405,8 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
     private CompletableFuture<Void> deleteInternal(String path, Optional<Long> expectedVersion) {
         // Ensure caches are invalidated before the operation is confirmed
         return storeDelete(path, expectedVersion).thenRun(() -> {
+            log.info("ExistsCache invalidate(deleteInternal): {}", path);
+
             existsCache.synchronous().invalidate(path);
             String parent = parent(path);
             if (parent != null) {
@@ -420,6 +444,7 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
     @Override
     public final CompletableFuture<Stat> put(String path, byte[] data, Optional<Long> optExpectedVersion,
             EnumSet<CreateOption> options) {
+        LoggerFactory.getLogger("wrapper\uD83D\uDD11").info("Put: {}, {}", path, optExpectedVersion);
         if (isClosed()) {
             return FutureUtil.failedFuture(
                     new MetadataStoreException.AlreadyClosedException());
@@ -447,8 +472,10 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
                         }
                     });
         } else {
+            log.info("Calling putInternal: {}", path);
             return putInternal(path, data, optExpectedVersion, options)
                     .whenComplete((v, t) -> {
+                        log.info("PutInternal {}: ({}, {})", path, v, t);
                         if (t != null) {
                             metadataStoreStats.recordPutOpsFailed(System.currentTimeMillis() - start);
                         } else {
@@ -462,12 +489,16 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
     public final CompletableFuture<Stat> putInternal(String path, byte[] data, Optional<Long> optExpectedVersion,
             Set<CreateOption> options) {
         // Ensure caches are invalidated before the operation is confirmed
+        log.info("PutInternal calls storePut: {}", path);
         return storePut(path, data, optExpectedVersion,
                 (options != null && !options.isEmpty()) ? EnumSet.copyOf(options) : EnumSet.noneOf(CreateOption.class))
                 .thenApply(stat -> {
-                    NotificationType type = stat.getVersion() == 0 ? NotificationType.Created
+                    log.info("putInternal {}: {}", path, stat);
+                    NotificationType type = stat.isFirstVersion() ? NotificationType.Created
                             : NotificationType.Modified;
+                    log.info("putInternal {}: {}", path, type);
                     if (type == NotificationType.Created) {
+                        log.info("ExistsCache invalidate (putInternal): {}", path);
                         existsCache.synchronous().invalidate(path);
                         String parent = parent(path);
                         if (parent != null) {
@@ -508,6 +539,7 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
 
     @Override
     public void close() throws Exception {
+        LoggerFactory.getLogger("wrapper\uD83D\uDD11").info("Close");
         executor.shutdownNow();
         executor.awaitTermination(10, TimeUnit.SECONDS);
         this.metadataStoreStats.close();
@@ -516,6 +548,8 @@ public abstract class AbstractMetadataStore implements MetadataStoreExtended, Co
     @VisibleForTesting
     public void invalidateAll() {
         childrenCache.synchronous().invalidateAll();
+        log.info("ExistsCache invalidate (all)");
+
         existsCache.synchronous().invalidateAll();
     }
 
